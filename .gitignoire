@@ -1,0 +1,31 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
+
+# === Jupyter/Notebook Artifacts ===
+.ipynb_checkpoints/
+*.ipynb
+
+# === Virtual Environments ===
+.venv/
+env/
+venv/
+*.env
+
+# === OS Files ===
+.DS_Store
+
+# === Streamlit Secrets ===
+.streamlit/secrets.toml
+
+# === GCP Credentials ===
+*.json
+radiant-wall-456420-s3-*.json
+
+# === Logs & Cache ===
+*.log
+.cache/

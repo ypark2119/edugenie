@@ -1,0 +1,28 @@
+# Core framework
+streamlit
+streamlit-calendar
+
+# Google Cloud
+google-cloud-storage
+google-cloud-logging
+google-generativeai
+
+# LangChain & LLMs
+langchain
+langchain-google-genai
+sentence-transformers
+
+# PDF processing
+PyMuPDF  # for 'fitz'
+
+# Text processing
+faiss-cpu  # for FAISS vector store
+numpy
+pandas
+scikit-learn  # used in other parts like t-SNE or PCA if added
+
+# iCal calendar parsing
+ics
+
+# HTTP requests
+requests
