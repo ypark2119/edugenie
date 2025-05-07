@@ -9,6 +9,7 @@ google-generativeai
 
 # LangChain & LLMs
 langchain
+langchain-community
 langchain-google-genai
 sentence-transformers
 
@@ -16,6 +17,7 @@ sentence-transformers
 PyMuPDF  # for 'fitz'
 
 # Text processing
+python-dotenv
 faiss-cpu  # for FAISS vector store
 numpy
 pandas
