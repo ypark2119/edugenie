@@ -15,7 +15,6 @@ import datetime as dt
 from collections import defaultdict
 
 import streamlit as st
-st.set_page_config(page_title="EduGenie Dashboard", layout="wide")
 from streamlit_calendar import calendar
 
 from ics import Calendar
@@ -34,21 +33,28 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import PromptTemplate
 
 
-@st.cache_resource
+# === CONFIGURATION ===
 def gcs_client():
-    credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"]
-    )
-    return storage.Client(credentials=credentials, project=credentials.project_id)
+    credentials_info = {
+        "type": st.secrets["gcp_service_account"]["type"],
+        "project_id": st.secrets["gcp_service_account"]["project_id"],
+        "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+        "private_key": st.secrets["gcp_service_account"]["private_key"].replace("\\n", "\n"),
+        "client_email": st.secrets["gcp_service_account"]["client_email"],
+        "client_id": st.secrets["gcp_service_account"]["client_id"],
+        "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
+        "token_uri": st.secrets["gcp_service_account"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"],
+    }
+    credentials = service_account.Credentials.from_service_account_info(credentials_info)
+    return storage.Client(credentials=credentials, project=credentials_info["project_id"])
 
 BUCKET_NAME = st.secrets["BUCKET_NAME"]
 STRUCTURE_FILE = "course_structure.json"
 google_api_key = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=google_api_key)
-@st.cache_resource
-def load_gemini_flash():
-    return genai.GenerativeModel("models/gemini-2.0-flash")
-gemini = load_gemini_flash()
+gemini = genai.GenerativeModel("models/gemini-2.0-flash")
 gcp_logging_client = google.cloud.logging.Client(credentials=gcs_client()._credentials, project=gcs_client().project)
 gcp_logging_client.setup_logging()
 logger = logging.getLogger("edu_genie")
@@ -77,13 +83,9 @@ def format_math_expressions(text: str) -> str:
 
 
 # === CLASS DEFINITIONS ===
-@st.cache_resource
-def load_embeddings():
-    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
 class PDFRagSystem:
     def __init__(self, google_api_key):
-        self.embeddings = load_embeddings()
+        self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         self.vector_store = None
         self.qa_chain = None
 
@@ -98,8 +100,9 @@ class PDFRagSystem:
     def initialize_qa_chain(self):
         if not self.vector_store:
             raise ValueError("Vector store is not initialized.")
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro")
+        
         retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=os.getenv("GOOGLE_API_KEY"))
 
         prompt_template = PromptTemplate.from_template(
             """You are an expert assistant. Answer the user's question using *only* the provided context below.
@@ -259,6 +262,7 @@ def load_all_calendar_events():
 
 
 # === STREAMLIT SETUP ===
+st.set_page_config(page_title="EduGenie Dashboard", layout="wide")
 st.sidebar.image("logo.png", width=400)
 
 with st.sidebar.expander("🔒 Privacy Notice"):
@@ -415,7 +419,7 @@ if page == "Dashboard":
                 with col2:
                     if st.button("✏️", key=f"edit_date_{i}"):
                         st.session_state["edit_event_index"] = i
-                        # st.rerun()  # Commented out to reduce reloads
+                        st.rerun()
                 with col3:
                     if st.button("❌", key=f"del_date_{i}"):
                         all_events.remove(e)
@@ -423,7 +427,7 @@ if page == "Dashboard":
                         gcs_client().bucket(BUCKET_NAME).blob(file).upload_from_string(
                             json.dumps([x for x in all_events if x.get("allDay") == e.get("allDay")], indent=2))
                         st.session_state["calendar_events"] = load_all_calendar_events()
-                        # st.rerun()  # Commented out to reduce reloads
+                        st.rerun()
         else:
             st.subheader("✏️ Edit Event")
             index = st.session_state["edit_event_index"]
@@ -456,11 +460,11 @@ if page == "Dashboard":
                         st.session_state["edit_event_index"] = None
                         st.session_state["calendar_events"] = load_all_calendar_events()
                         st.success("✅ Event updated.")
-                        # st.rerun()  # Commented out to reduce reloads
+                        st.rerun()
 
                 if st.button("Cancel"):
                     st.session_state["edit_event_index"] = None
-                    # st.rerun()  # Commented out to reduce reloads
+                    st.rerun()
     else:
         st.info("📭 No events yet. Add a class or assignment below.")
 
@@ -483,7 +487,7 @@ if page == "Dashboard":
                 gcs_client().bucket(BUCKET_NAME).blob("calendar_assignments.json").upload_from_string(
                     json.dumps(assignments, indent=2))
                 st.session_state["calendar_events"] = load_all_calendar_events()
-                # st.rerun()  # Commented out to reduce reloads
+                st.rerun()
 
     with st.expander("➕ Add New Class"):
         with st.form("add_class_form"):
@@ -508,7 +512,7 @@ if page == "Dashboard":
                 gcs_client().bucket(BUCKET_NAME).blob("calendar_classes.json").upload_from_string(
                     json.dumps(classes, indent=2))
                 st.session_state["calendar_events"] = load_all_calendar_events()
-                # st.rerun()  # Commented out to reduce reloads
+                st.rerun()
 
 
 
@@ -772,7 +776,7 @@ elif page == "Courses":
             if new_course not in structure:
                 structure[new_course] = []
                 upload_structure(structure)
-                # st.rerun()  # Commented out to reduce reloads
+                st.rerun()
 
         course_names = list(structure.keys())
         if course_names:
@@ -784,13 +788,13 @@ elif page == "Courses":
                     if st.button("🗑 Delete Course"):
                         del structure[selected_course]
                         upload_structure(structure)
-                        # st.rerun()  # Commented out to reduce reloads
+                        st.rerun()
                 with col2:
                     rename = st.text_input("✏️ Rename Course", key="rename_course")
                     if st.button("Rename Course") and rename:
                         structure[rename] = structure.pop(selected_course)
                         upload_structure(structure)
-                        # st.rerun()  # Commented out to reduce reloads
+                        st.rerun()
 
     # === TAB 2: CATEGORY SETUP ===
     with tab2:
@@ -802,7 +806,7 @@ elif page == "Courses":
             if st.button("Add Category") and new_cat not in structure[selected_course]:
                 structure[selected_course].append(new_cat)
                 upload_structure(structure)
-                # st.rerun()  # Commented out to reduce reloads
+                st.rerun()
 
             if structure[selected_course]:
                 selected_cat = st.selectbox("📂 Select a category", structure[selected_course], key="selected_cat")
@@ -813,7 +817,7 @@ elif page == "Courses":
                         if st.button("🗑 Delete Category"):
                             structure[selected_course].remove(selected_cat)
                             upload_structure(structure)
-                            # st.rerun()  # Commented out to reduce reloads
+                            st.rerun()
                     with col2:
                         rename_cat = st.text_input("✏️ Rename Category", key="rename_cat")
                         if st.button("Rename Category") and rename_cat:
@@ -827,7 +831,7 @@ elif page == "Courses":
                             structure[selected_course].remove(selected_cat)
                             structure[selected_course].append(rename_cat)
                             upload_structure(structure)
-                            # st.rerun()  # Commented out to reduce reloads
+                            st.rerun()
 
     # === TAB 3: FILE MANAGEMENT ===
     with tab3:
@@ -846,7 +850,7 @@ elif page == "Courses":
                     upload_to_gcs(BUCKET_NAME, path, file)
                     st.success("✅ File uploaded.")
                     st.session_state["file_uploaded"] = True
-                    # st.rerun()  # Commented out to reduce reloads
+                    st.rerun()
 
                 if "file_uploaded" in st.session_state:
                     del st.session_state["file_uploaded"]
@@ -869,7 +873,7 @@ elif page == "Courses":
                             if col3.button("🗑", key=f"delete_{fname}"):
                                 if delete_from_gcs(file_path):
                                     st.success(f"Deleted {fname}")
-                                    # st.rerun()  # Commented out to reduce reloads
+                                    st.rerun()
                                 else:
                                     st.error("Failed to delete.")
 
@@ -877,7 +881,7 @@ elif page == "Courses":
                     st.markdown("### 🤖 Ready to Chat with Selected Files?")
                     if st.button("💬 Chat"):
                         st.session_state.page = "Chatbot"
-                        # st.rerun()  # Commented out to reduce reloads
+                        st.rerun()
 
 
 
@@ -892,7 +896,7 @@ elif page == "Chatbot":
         st.title("🧞‍♂️ How can I help you? ✨")
 
         if "rag_system" not in st.session_state:
-            st.session_state.rag_system = PDFRagSystem()
+            st.session_state.rag_system = PDFRagSystem(google_api_key=os.getenv("GOOGLE_API_KEY"))
         if "messages" not in st.session_state:
             st.session_state.messages = []
         if "new_message" not in st.session_state:
@@ -908,7 +912,7 @@ elif page == "Chatbot":
                 st.session_state.messages.append({"role": "assistant", "content": response})
             st.session_state.new_message = False
             st.session_state.pending_input = ""
-            # st.rerun()  # Commented out to reduce reloads
+            st.rerun()
 
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
@@ -921,7 +925,7 @@ elif page == "Chatbot":
             else:
                 st.session_state.pending_input = prompt
                 st.session_state.new_message = True
-                # st.rerun()  # Commented out to reduce reloads
+                st.rerun()
 
     with right:
         st.markdown("### 📂 Uploaded Files")
@@ -955,15 +959,13 @@ elif page == "Chatbot":
                     for path in st.session_state["selected_files"]:
                         blob = gcs_client().bucket(BUCKET_NAME).blob(path)
                         with blob.open("rb") as f:
-                            with st.spinner("🔍 Processing PDF and generating embeddings..."):
-                                _, chunks = st.session_state.rag_system.process_pdf_bytes(f.read())
-                                all_chunks.extend(chunks)
-                                logger.info(f"Extended chunk list with {len(chunks)} chunks from {path}")
+                            _, chunks = st.session_state.rag_system.process_pdf_bytes(f.read())
+                            all_chunks.extend(chunks)
+                            logger.info(f"Extended chunk list with {len(chunks)} chunks from {path}")
 
                     logger.info(f"Starting vectorization of {len(all_chunks)} chunks")
                     embedding_model = st.session_state.rag_system.embeddings.client
-                    with st.spinner("🔢 Encoding document chunks..."):
-                        embeddings = embedding_model.encode(all_chunks, convert_to_numpy=True)
+                    embeddings = embedding_model.encode(all_chunks, convert_to_numpy=True)
 
                     df = pd.DataFrame(embeddings)
                     df["text"] = all_chunks
@@ -984,16 +986,14 @@ elif page == "Chatbot":
                     # st.success(f"📁 Embedding log uploaded to: gs://{BUCKET_NAME}/{uploaded_path}")
 
                     if all_chunks:
-                        with st.spinner("⚙️ Initializing vector store..."):
-                            st.session_state.rag_system.vector_store = FAISS.from_texts(
-                                all_chunks, st.session_state.rag_system.embeddings
-                            )
-                            logger.info("FAISS index created and vector store assigned")
-                        with st.spinner("🧠 Loading Gemini-based QA chain..."):
-                            st.session_state.rag_system.initialize_qa_chain()
-                            logger.info("Gemini QA chain initialized")
-                            st.success(f"✅ Loaded {len(st.session_state['selected_files'])} file(s).")
-                            st.session_state["selected_files"] = []
+                        st.session_state.rag_system.vector_store = FAISS.from_texts(
+                            all_chunks, st.session_state.rag_system.embeddings
+                        )
+                        logger.info("FAISS index created and vector store assigned")
+                        st.session_state.rag_system.initialize_qa_chain()
+                        logger.info("Gemini QA chain initialized")
+                        st.success(f"✅ Loaded {len(st.session_state['selected_files'])} file(s).")
+                        st.session_state["selected_files"] = []
                     else:
                         st.error("❌ No extractable content found in selected files.")
                 except Exception as e:
