@@ -1,5 +1,4 @@
 import os
-os.environ["PYTORCH_JIT"] = "0"
 import uuid
 import re
 import json
@@ -880,8 +879,31 @@ elif page == "Courses":
                 if st.session_state["selected_files"]:
                     st.markdown("### 🤖 Ready to Chat with Selected Files?")
                     if st.button("💬 Chat"):
-                        st.session_state.page = "Chatbot"
-                        st.rerun()
+                        try:
+                            all_chunks = []
+                            rag = PDFRagSystem(google_api_key=os.getenv("GOOGLE_API_KEY"))
+                            for path in st.session_state["selected_files"]:
+                                blob = gcs_client().bucket(BUCKET_NAME).blob(path)
+                                with blob.open("rb") as f:
+                                    _, chunks = rag.process_pdf_bytes(f.read())
+                                    all_chunks.extend(chunks)
+                                    logger.info(f"Extracted {len(chunks)} chunks from {path}")
+
+                            if all_chunks:
+                                st.session_state.rag_system.vector_store = FAISS.from_texts(
+                                    all_chunks, st.session_state.rag_system.embeddings
+                                )
+                                st.session_state.rag_system.initialize_qa_chain()
+                                logger.info("RAG system initialized with selected files")
+                                st.session_state["selected_files"] = []
+                                st.session_state.page = "Chatbot"
+                                st.rerun()
+                            else:
+                                st.error("❌ No extractable content found in selected files.")
+                        except Exception as e:
+                            logger.error("Failed to process files before chat", exc_info=True)
+                            st.error(f"❌ Failed to process files: {e}")
+
 
 
 
@@ -976,7 +998,7 @@ elif page == "Chatbot":
                     def upload_embedding_log_to_gcs(csv_buffer, bucket_name, file_prefix="embedding_logs"):
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         file_path = f"{file_prefix}/embedding_log_{timestamp}.csv"
-                        client = storage.Client()
+                        client = gcs_client()
                         bucket = client.bucket(bucket_name)
                         blob = bucket.blob(file_path)
                         blob.upload_from_string(csv_buffer.getvalue(), content_type="text/csv")
@@ -999,4 +1021,3 @@ elif page == "Chatbot":
                 except Exception as e:
                     logger.error("Failed to load files", exc_info=True)
                     st.error(f"❌ Failed to load files: {e}")
-
