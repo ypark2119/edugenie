@@ -18,6 +18,7 @@ from streamlit_calendar import calendar
 
 from ics import Calendar
 from google.cloud import storage
+from google.oauth2 import service_account
 import google.cloud.logging
 from google.cloud.logging_v2.handlers import CloudLoggingHandler
 
@@ -32,13 +33,28 @@ from langchain.prompts import PromptTemplate
 
 
 # === CONFIGURATION ===
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "radiant-wall-456420-s3-7a6e386e29a2.json"
+def gcs_client():
+    credentials_info = {
+        "type": st.secrets["gcp_service_account"]["type"],
+        "project_id": st.secrets["gcp_service_account"]["project_id"],
+        "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+        "private_key": st.secrets["gcp_service_account"]["private_key"].replace("\\n", "\n"),
+        "client_email": st.secrets["gcp_service_account"]["client_email"],
+        "client_id": st.secrets["gcp_service_account"]["client_id"],
+        "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
+        "token_uri": st.secrets["gcp_service_account"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"],
+    }
+    credentials = service_account.Credentials.from_service_account_info(credentials_info)
+    return storage.Client(credentials=credentials, project=credentials_info["project_id"])
+
 BUCKET_NAME = st.secrets["BUCKET_NAME"]
 STRUCTURE_FILE = "course_structure.json"
 google_api_key = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=google_api_key)
 gemini = genai.GenerativeModel("models/gemini-2.0-flash")
-gcp_logging_client = google.cloud.logging.Client()
+gcp_logging_client = google.cloud.logging.Client(credentials=gcs_client()._credentials, project=gcs_client().project)
 gcp_logging_client.setup_logging()
 logger = logging.getLogger("edu_genie")
 
@@ -117,9 +133,6 @@ class PDFRagSystem:
     
 
 # === UTILS ===
-def gcs_client():
-    return storage.Client()
-
 def upload_to_gcs(bucket_name, destination_blob_name, file):
     client = gcs_client()
     bucket = client.bucket(bucket_name)
