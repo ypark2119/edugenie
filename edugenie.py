@@ -286,7 +286,7 @@ class PDFRagSystem:
 
 
 # === STREAMLIT SETUP ===
-st.set_page_config(page_title="EduGenie Dashboard", layout="wide")
+st.set_page_config(page_title="Welcome to EduGenie!", layout="wide")
 st.markdown("""
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS_HTML"></script>
     <script>
